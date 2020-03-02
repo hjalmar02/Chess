@@ -10,21 +10,36 @@ WS = (1000, 1000)  # Window size (x, y)
 TILESIZE = WS[0] // 8
 
 BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+YELLOW = (0, 255, 255)
+
 
 # Board colors
 LIGHTBROWN = (222, 184, 135)
 BROWN = (139, 69, 19)
+
+DEBUG = True
 
 
 class ChessGame:
 
     def __init__(self):
 
+        pygame.init()
+
         self.board = []
         for column in range(8):  # Two-dimensional list, eight rows and columns
             self.board.append([None] * 8)  # 'None' represents an empty square
 
         self.selected = None
+
+        self.font = pygame.font.Font('freesansbold.ttf', int(0.060 * WS[0]))
+
+    @staticmethod
+    def check_quit():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                sys.exit()
 
     def draw(self, surface):
 
@@ -40,14 +55,54 @@ class ChessGame:
 
         if self.selected:
 
-            # Marking all possible moves for selected piece. Each move is represented
-            # by a transparent circle
+            # Marker for possible moves.
             marker = pygame.Surface((TILESIZE, TILESIZE), pygame.SRCALPHA)
             center = (TILESIZE // 2, TILESIZE // 2)
             radius = TILESIZE // 4
-            pygame.draw.circle(marker, (0, 0, 0, 100), center, radius)
+
             for square in self.selected.moves:
                 x, y = square[0], square[1]
+
+                # If the king is selected, illegal moves (that would
+                # leave it in check) are marked.
+                if isinstance(self.selected, King):
+                    if self.selected.color == "white":
+                        if square in self.black_moves:
+                            # Red marker = Illegal move
+                            pygame.draw.circle(
+                                marker, (255, 0, 0, 100), center, radius)
+                        else:
+                            if 0 <= x < 8 and 0 <= y < 8:
+                                if (self.board[x][y]
+                                        and self.board[x][y].color == self.selected.color):
+                                    continue
+                                pygame.draw.circle(
+                                    marker, (0, 0, 0, 100), center, radius)
+                    elif self.selected.color == "black":
+                        if square in self.white_moves:
+                            pygame.draw.circle(
+                                marker, (255, 0, 0, 100), center, radius)
+                        else:
+                            if 0 <= x < 8 and 0 <= y < 8:
+                                if (self.board[x][y]
+                                        and self.board[x][y].color == self.selected.color):
+                                    continue
+                            pygame.draw.circle(
+                                marker, (0, 0, 0, 100), center, radius)
+
+                # The king isn't selected
+                else:
+                    if 0 <= x < 8 and 0 <= y < 8:
+                        # Unmarking all friendly pieces
+                        if (self.board[x][y]
+                                and self.board[x][y].color == self.selected.color):
+                            continue
+                        else:
+                            pygame.draw.circle(
+                                marker, (0, 0, 0, 100), center, radius)
+                    else:
+                        continue
+
                 x *= TILESIZE
                 y *= TILESIZE
                 surface.blit(marker, (x, y))
@@ -64,6 +119,11 @@ class ChessGame:
                         piece.draw(surface, TILESIZE)
 
     def set_board(self):
+
+        # Emptying board
+        for column in self.board:
+            for square in column:
+                square = None
 
         # Black pieces
         self.board[0][0] = Rook("black", (0, 0))
@@ -89,6 +149,113 @@ class ChessGame:
         for column in range(8):
             self.board[column][6] = Pawn("white", (column, 6))
 
+    def move_selected(self, dest):
+        """Move selected piece to destination, if possible."""
+
+        x, y = dest[0], dest[1]
+
+        # Check if move is in selected piece's range
+        if [x, y] in self.selected.moves:
+            # Check for illegal move
+            if self.board[x][y] and self.board[x][y].color == self.selected.color:
+                return
+            else:
+                prevx = self.selected.pos[0]
+                prevy = self.selected.pos[1]
+                self.selected.move((x, y), self.board)
+                self.board[x][y] = self.selected
+                self.selected = None
+                self.board[prevx][prevy] = None
+                self.cur_turn = {
+                    "white": "black", "black": "white"
+                }[self.cur_turn]
+
+
+    def is_checkmate(self):
+        """Check if either king is in checkmate."""
+        white_checkmate = True
+        black_checkmate = True
+
+        for column in self.board:
+            for piece in column:
+                if piece and isinstance(piece, King):
+                    if piece.color == "white":
+                        if piece.pos in self.black_moves:
+                            white_checkmate = True
+                            for move in piece.moves:
+                                if move not in self.black_moves:
+                                    if (self.board[move[0]][move[1]] and
+                                        self.board[move[0]][move[1]].color 
+                                            != piece.color):
+                                        white_checkmate = False
+                                    elif not self.board[move[0]][move[1]]:
+                                        white_checkmate = False
+                            if white_checkmate:
+                                self.loser = "WHITE"
+                                self.game_over = True
+
+        for column in self.board:
+            for piece in column:
+                if piece and isinstance(piece, King):
+                    if piece.color == "black":
+                        if piece.pos in self.white_moves:
+                            black_checkmate = True
+                            for move in piece.moves:
+                                if move not in self.white_moves:
+                                    if (self.board[move[0]][move[1]] and
+                                        self.board[move[0]][move[1]].color 
+                                            != piece.color):
+                                        black_checkmate = False
+                                    elif not self.board[move[0]][move[1]]:
+                                        black_checkmate = False
+                            if black_checkmate:
+                                self.loser = "BLACK"
+                                self.game_over = True
+
+    def game_over_screen(self, surface, loser=None):
+
+        for alpha in range(0, 25):
+            self.check_quit()
+            pygame.time.delay(50)
+            overlay = pygame.Surface(WS, pygame.SRCALPHA)
+            self.draw(overlay)
+            overlay.fill((0, 0, 0, alpha))
+            surface.blit(overlay, (0, 0))
+            pygame.display.update()
+
+        for alpha in range(0, 100):
+            pygame.time.delay(30)
+            text_srfc = pygame.Surface(WS, pygame.SRCALPHA)
+            text = self.font.render(f"{loser} IS IN CHECKMATE!", True, (0, 255, 255))
+            x, y = WS[0] // 8, WS[1] // 2 - 1 / 4 * WS[1]
+            text_srfc.blit(text, (x, y))
+
+            text2 = self.font.render("PRESS [R] TO RESTART", True, (0, 255, 255))
+            x, y = WS[0] // 8, WS[1] // 2
+            text_srfc.blit(text2, (x, y))
+
+            surface.blit(text_srfc, (0, 0))
+            pygame.display.update()
+
+        while True:
+            print('entered loop')
+            #self.check_quit()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        self.set_board()
+                        self.play()
+                        break
+            pygame.display.update()
+
+
+
+
+        
+
+
     def play(self):
 
         self.set_board()
@@ -96,41 +263,95 @@ class ChessGame:
         pygame.init()
         screen = pygame.display.set_mode(WS)
 
+        # Current turn ("white"/"black")
+        self.cur_turn = "white"
+
+        self.game_over = False
+        self.loser = None
         # Main loop
-        while True:
+        while not self.game_over:
+            
             screen.fill(BLACK)
+
+            # All possible movements of the white and black pieces,
+            # respectively.
+            self.white_moves = []
+            self.black_moves = []
 
             for column in self.board:
                 for piece in column:
                     if piece:
                         piece.update_moves(self.board)
+                        if piece.color == "white":
+                            for square in piece.moves:
+                                self.white_moves.append(square)
 
+                            if isinstance(piece, Pawn):
+                                x, y = piece.pos[0], piece.pos[1]
+                                self.white_moves.append(
+                                    [[x - 1, y - 1], [x + 1, y - 1]])
+                                try:
+                                    self.white_moves.remove([x, y - 2])
+                                except ValueError:
+                                    pass
+                        elif piece.color == "black":
+                            if isinstance(piece, Pawn):
+                                x, y = piece.pos[0], piece.pos[1]
+                                self.black_moves.append([x - 1, y + 1])
+                                self.black_moves.append([x + 1, y + 1])
+                            else:
+                                for square in piece.moves:
+                                    self.black_moves.append(square)
+
+            self.is_checkmate()
+
+            # Event handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     sys.exit()
+
                 if event.type == pygame.KEYDOWN:
+                    # ESC-key deselects your current piece
                     if event.key == pygame.K_ESCAPE:
                         self.selected = None
+                    if event.key == pygame.K_END and DEBUG:
+                        self.game_over = True
+
+                # Pressed mousebutton
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    # The (x, y)-coordinates for the square you pressed:
                     x, y = [i // TILESIZE for i in pygame.mouse.get_pos()]
+
                     if not self.selected:
-                        self.selected = self.board[x][y]
+                        if self.board[x][y]:
+                            if self.board[x][y].color == self.cur_turn or DEBUG:
+                                # Selects piece on clicked square
+                                self.selected = self.board[x][y]
                     else:
+                        # If you pressed the original position of your
+                        # selected piece it will deselect it
                         if [x, y] == self.selected.pos:
                             self.selected = None
+
+                        # Square is a valid move
                         elif [x, y] in self.selected.moves:
 
-                            prevx = self.selected.pos[0]
-                            prevy = self.selected.pos[1]
-
-                            self.selected.move((x, y), self.board)
-                            self.board[x][y] = self.selected
-                            self.selected = None
-                            self.board[prevx][prevy] = None
+                            # King is selected
+                            if isinstance(self.selected, King):
+                                if self.selected.color == "white":
+                                    if [x, y] not in self.black_moves:
+                                        self.move_selected((x, y))
+                                elif self.selected.color == "black":
+                                    if [x, y] not in self.white_moves:
+                                        self.move_selected((x, y))
+                            else:
+                                self.move_selected((x, y))
 
             self.draw(screen)
 
             pygame.display.update()
+
+        self.game_over_screen(screen, self.loser)
 
 
 if __name__ == "__main__":

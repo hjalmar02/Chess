@@ -62,11 +62,6 @@ class Bishop(Piece):
                         self.moves.remove([x + j, y + j])
                     except ValueError:
                         continue
-                if board[x + i][y + i].color == self.color:
-                    try:
-                        self.moves.remove([x + i, y + i])
-                    except ValueError:
-                        continue
 
         for i in [a for  a in range(1, 8) if x + a < 8 and y - a >= 0]:
             if board[x + i][y - i]:
@@ -75,11 +70,6 @@ class Bishop(Piece):
                         break
                     try:
                         self.moves.remove([x + j, y - j])
-                    except ValueError:
-                        continue
-                if board[x + i][y - i].color == self.color:
-                    try:
-                        self.moves.remove([x + i, y - i])
                     except ValueError:
                         continue
 
@@ -92,11 +82,6 @@ class Bishop(Piece):
                         self.moves.remove([x - j, y + j])
                     except ValueError:
                         continue
-                if board[x - i][y + i].color == self.color:
-                    try:
-                        self.moves.remove([x - i, y + i])
-                    except ValueError:
-                        continue
 
         for i in [a for a in range(1, 8) if x - a >= 0 and y - a >= 0]:
             if board[x - i][y - i]:
@@ -105,11 +90,6 @@ class Bishop(Piece):
                         break
                     try:
                         self.moves.remove([x - j, y - j])
-                    except ValueError:
-                        continue
-                if board[x - i][y - i].color == self.color:
-                    try:
-                        self.moves.remove([x - i, y - i])
                     except ValueError:
                         continue
 
@@ -147,22 +127,12 @@ class Rook(Piece):
                         self.moves.remove([x + j, y])
                     except ValueError:
                         continue
-                if board[x + i][y].color == self.color:
-                    try:
-                        self.moves.remove([x + i, y])
-                    except ValueError:
-                        continue
 
         for i in range(1, x + 1):
             if board[x - i][y]:
                 for j in range(i + 1, x + 1):
                     try:
                         self.moves.remove([x - j, y])
-                    except ValueError:
-                        continue
-                if board[x - i][y].color == self.color:
-                    try:
-                        self.moves.remove([x - i, y])
                     except ValueError:
                         continue
 
@@ -173,22 +143,12 @@ class Rook(Piece):
                         self.moves.remove([x, y + j])
                     except ValueError:
                         continue
-                if board[x][y + i].color == self.color:
-                    try:
-                        self.moves.remove([x, y + i])
-                    except ValueError:
-                        continue
 
         for i in range(1, y + 1):
             if board[x][y - i]:
                 for j in range(i + 1, y + 1):
                     try:
                         self.moves.remove([x, y - j])
-                    except ValueError:
-                        continue
-                if board[x][y - i].color == self.color:
-                    try:
-                        self.moves.remove([x, y - i])
                     except ValueError:
                         continue
 
@@ -212,6 +172,23 @@ class Pawn(Piece):
         self.moves.append([self.pos[0], self.pos[1] + dy])
         if self.first_move:
             self.moves.append([self.pos[0], self.pos[1] + 2 * dy])
+
+        if board:
+            for square in self.moves:
+                x, y = square[0], square[1]
+                if board[x][y]:
+                    self.moves.remove(square)
+
+            x, y = self.pos[0], self.pos[1]
+            for dx in [-1, 1]:
+                try:
+                    if board[x + dx][y + dy]:
+                        if board[x + dx][y + dy].color != self.color:
+                            self.moves.append([x + dx, y + dy])
+                except IndexError:
+                    continue
+
+
 
     def move(self, dest, board=None):
         super().move(dest)
@@ -259,21 +236,18 @@ class Knight(Piece):
 
         x, y = self.pos[0], self.pos[1]
 
-        self.moves = []
-
-        # Temporary list of moves, will be filtered below.
-        temp_moves = [[x - 1, y - 2], [x + 1, y - 2], [x + 2, y - 1],
+        self.moves = [[x - 1, y - 2], [x + 1, y - 2], [x + 2, y - 1],
                       [x + 2, y + 1], [x + 1, y + 2], [x - 1, y + 2],
                       [x - 2, y + 1], [x - 2, y - 1]]
 
         # Removing moves which end on friendly piece.
-        if board:
-            for move in temp_moves:
-                if 0 <= move[0] < 8 and 0 <= move[1] < 8:
-                    if not board[move[0]][move[1]]:
-                        self.moves.append(move)
-                    elif board[move[0]][move[1]].color != self.color:
-                        self.moves.append(move)
+        # if board:
+        #     for move in temp_moves:
+        #         if 0 <= move[0] < 8 and 0 <= move[1] < 8:
+        #             if not board[move[0]][move[1]]:
+        #                 self.moves.append(move)
+        #             elif board[move[0]][move[1]].color != self.color:
+        #                 self.moves.append(move)
 
 class King(Piece):
 
@@ -288,20 +262,18 @@ class King(Piece):
 
         x, y = self.pos[0], self.pos[1]
 
-        self.moves = []
-
         # Temporary list of moves, will be filtered below.
-        temp_moves = [[x - 1, y - 1], [x, y - 1], [x + 1, y - 1], [x + 1, y],
+        self.moves = [[x - 1, y - 1], [x, y - 1], [x + 1, y - 1], [x + 1, y],
                       [x + 1, y + 1], [x, y + 1], [x - 1, y + 1], [x - 1, y]]
 
-        # Removing moves which end on friendly piece or outside the board.
-        if board:
-            for move in temp_moves:
-                if 0 <= move[0] < 8 and 0 <= move[1] < 8:
-                    if not board[move[0]][move[1]]:
-                        self.moves.append(move)
-                    elif board[move[0]][move[1]].color != self.color:
-                        self.moves.append(move)
+        # # Removing moves which end on friendly piece or outside the board.
+        # if board:
+        #     for move in temp_moves:
+        #         if 0 <= move[0] < 8 and 0 <= move[1] < 8:
+        #             if not board[move[0]][move[1]]:
+        #                 self.moves.append(move)
+        #             elif board[move[0]][move[1]].color != self.color:
+        #                 self.moves.append(move)
 
 if __name__ == "__main__":
     # For testing purposes
