@@ -3,6 +3,8 @@ from sys import exit
 import sys
 from os.path import join
 from pieces import *
+from ai import ChessBot
+from math import sqrt
 
 WS = (1000, 1000)  # Window size (x, y)
 
@@ -18,7 +20,7 @@ YELLOW = (0, 255, 255)
 LIGHTBROWN = (222, 184, 135)
 BROWN = (139, 69, 19)
 
-DEBUG = True
+DEBUG = False
 
 
 class ChessGame:
@@ -35,13 +37,16 @@ class ChessGame:
 
         self.font = pygame.font.Font('freesansbold.ttf', int(0.060 * WS[0]))
 
+        # "AI" opponent (currently only random movements)
+        self.opp = ChessBot("black")
+
     @staticmethod
     def check_quit():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit()
 
-    def draw(self, surface):
+    def draw(self, surface, selection=True):
 
         # Draw board background
         for column in range(0, 8):
@@ -53,7 +58,7 @@ class ChessGame:
                 else:
                     pygame.draw.rect(surface, BROWN, (x, y, w, h))
 
-        if self.selected:
+        if self.selected and selection:
 
             # Marker for possible moves.
             marker = pygame.Surface((TILESIZE, TILESIZE), pygame.SRCALPHA)
@@ -149,26 +154,46 @@ class ChessGame:
         for column in range(8):
             self.board[column][6] = Pawn("white", (column, 6))
 
-    def move_selected(self, dest):
+    def move_selected(self, dest, animate=False):
         """Move selected piece to destination, if possible."""
 
         x, y = dest[0], dest[1]
 
-        # Check if move is in selected piece's range
-        if [x, y] in self.selected.moves:
-            # Check for illegal move
-            if self.board[x][y] and self.board[x][y].color == self.selected.color:
-                return
-            else:
-                prevx = self.selected.pos[0]
-                prevy = self.selected.pos[1]
+        if self._legal_move(dest):
+            prevx = self.selected.pos[0]
+            prevy = self.selected.pos[1]
+            if not animate:
                 self.selected.move((x, y), self.board)
                 self.board[x][y] = self.selected
-                self.selected = None
-                self.board[prevx][prevy] = None
-                self.cur_turn = {
-                    "white": "black", "black": "white"
-                }[self.cur_turn]
+            else:
+                startx = prevx * TILESIZE
+                starty = prevy * TILESIZE
+                print(startx, starty)
+
+                endx = x * TILESIZE
+                endy = y * TILESIZE
+                dx, dy = endx - startx, endy - starty
+
+                steps = int(sqrt(dx ** 2 + dy ** 2) / 10)
+
+                for i in range(steps):
+                    pygame.time.delay(10)
+                    self.check_quit()
+                    x_ani = startx + int(i / steps * (endx - startx))
+                    y_ani = starty + int(i / steps * (endy - starty))
+                    self.draw(self.screen, False)
+                    self.selected.draw(self.screen, TILESIZE, (x_ani, y_ani))
+                    pygame.display.update()
+
+                self.selected.move((x, y), self.board)
+                self.board[x][y] = self.selected
+
+
+            self.selected = None
+            self.board[prevx][prevy] = None
+            self.cur_turn = {
+            "white": "black", "black": "white"
+            }[self.cur_turn]
 
 
     def is_checkmate(self):
@@ -202,12 +227,15 @@ class ChessGame:
                             black_checkmate = True
                             for move in piece.moves:
                                 if move not in self.white_moves:
-                                    if (self.board[move[0]][move[1]] and
-                                        self.board[move[0]][move[1]].color 
-                                            != piece.color):
-                                        black_checkmate = False
-                                    elif not self.board[move[0]][move[1]]:
-                                        black_checkmate = False
+                                    try:
+                                        if (self.board[move[0]][move[1]] and # TODO: Raises errors
+                                            self.board[move[0]][move[1]].color 
+                                                != piece.color):
+                                            black_checkmate = False
+                                        elif not self.board[move[0]][move[1]]:
+                                            black_checkmate = False
+                                    except IndexError:
+                                        continue
                             if black_checkmate:
                                 self.loser = "BLACK"
                                 self.game_over = True
@@ -238,8 +266,6 @@ class ChessGame:
             pygame.display.update()
 
         while True:
-            print('entered loop')
-            #self.check_quit()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     sys.exit()
@@ -250,8 +276,47 @@ class ChessGame:
                         break
             pygame.display.update()
 
+    def _legal_move(self, dest):
+        """Check if move to dest with selected piece is legal.
 
+        Args:
+            dest (tuple/list): Move destination (x, y).
 
+        Returns:
+            bool: True if move is legal, False if not.
+
+        """
+    
+        x, y = dest[0], dest[1]
+
+        color = self.selected.color
+
+        opp_moves = {
+        "white": self.black_moves, "black": self.white_moves
+        }[color]
+
+        if not 0 <= x < 8 or not 0 <= y < 8:
+            print('invalid index')
+            return False
+
+        # Check if move is in selected piece's range
+        if [x, y] in self.selected.moves:
+
+            # Friendly piece on square
+            if self.board[x][y] and self.board[x][y].color == color:
+                return False
+
+            # Square is empty or occupied by opponent piece.
+            else:
+
+                # King is selected => check for enemy moves
+                if isinstance(self.selected, King):
+                    # King would be in check
+                    if [x, y] in opp_moves:
+                        return False
+                return True
+        else:
+            return False
 
         
 
@@ -261,7 +326,7 @@ class ChessGame:
         self.set_board()
 
         pygame.init()
-        screen = pygame.display.set_mode(WS)
+        self.screen = pygame.display.set_mode(WS)
 
         # Current turn ("white"/"black")
         self.cur_turn = "white"
@@ -271,7 +336,7 @@ class ChessGame:
         # Main loop
         while not self.game_over:
             
-            screen.fill(BLACK)
+            self.screen.fill(BLACK)
 
             # All possible movements of the white and black pieces,
             # respectively.
@@ -347,11 +412,25 @@ class ChessGame:
                             else:
                                 self.move_selected((x, y))
 
-            self.draw(screen)
+            if self.cur_turn == "black":
+                while True:
+                    opp_move = self.opp.random_move(self.board)
+                    xpos, ypos = opp_move[0]
+                    x, y = opp_move[1]
+                    self.selected = self.board[xpos][ypos]
+
+                    if self._legal_move((x, y)):
+                        
+                        self.move_selected((x, y), True)
+                        break
+
+
+
+            self.draw(self.screen)
 
             pygame.display.update()
 
-        self.game_over_screen(screen, self.loser)
+        self.game_over_screen(self.screen, self.loser)
 
 
 if __name__ == "__main__":

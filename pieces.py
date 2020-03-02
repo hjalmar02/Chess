@@ -176,8 +176,11 @@ class Pawn(Piece):
         if board:
             for square in self.moves:
                 x, y = square[0], square[1]
-                if board[x][y]:
-                    self.moves.remove(square)
+                try:
+                    if board[x][y]:
+                        self.moves.remove(square)
+                except IndexError:
+                    continue
 
             x, y = self.pos[0], self.pos[1]
             for dx in [-1, 1]:
